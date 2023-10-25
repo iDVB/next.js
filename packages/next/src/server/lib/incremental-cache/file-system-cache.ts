@@ -5,7 +5,11 @@ import type { CachedFetchValue } from '../../response-cache'
 
 import LRUCache from 'next/dist/compiled/lru-cache'
 import path from '../../../shared/lib/isomorphic/path'
-import { NEXT_CACHE_TAGS_HEADER } from '../../../lib/constants'
+import {
+  NEXT_CACHE_TAGS_HEADER,
+  RSC_PREFETCH_SUFFIX,
+  RSC_SUFFIX,
+} from '../../../lib/constants'
 
 type FileSystemCacheContext = Omit<
   CacheHandlerContext,
@@ -13,6 +17,7 @@ type FileSystemCacheContext = Omit<
 > & {
   fs: CacheFs
   serverDistDir: string
+  experimental: { ppr: boolean }
 }
 
 type TagsManifest = {
@@ -29,6 +34,7 @@ export default class FileSystemCache implements CacheHandler {
   private appDir: boolean
   private tagsManifestPath?: string
   private revalidatedTags: string[]
+  private readonly experimental: { ppr: boolean }
 
   constructor(ctx: FileSystemCacheContext) {
     this.fs = ctx.fs
@@ -36,6 +42,7 @@ export default class FileSystemCache implements CacheHandler {
     this.serverDistDir = ctx.serverDistDir
     this.appDir = !!ctx._appDir
     this.revalidatedTags = ctx.revalidatedTags
+    this.experimental = ctx.experimental
 
     if (ctx.maxMemoryCacheSize && !memoryCache) {
       memoryCache = new LRUCache({
@@ -175,27 +182,32 @@ export default class FileSystemCache implements CacheHandler {
             }
           }
         } else {
-          const pageData = isAppPath
-            ? await this.fs.readFile(
+          let pageData: any
+          if (isAppPath) {
+            pageData = await this.fs.readFile(
+              (
+                await this.getFsPath({
+                  pathname: `${key}${
+                    this.experimental.ppr ? RSC_PREFETCH_SUFFIX : RSC_SUFFIX
+                  }`,
+                  appDir: true,
+                })
+              ).filePath,
+              'utf8'
+            )
+          } else {
+            pageData = JSON.parse(
+              await this.fs.readFile(
                 (
                   await this.getFsPath({
-                    pathname: `${key}.rsc`,
-                    appDir: true,
+                    pathname: `${key}.json`,
+                    appDir: false,
                   })
                 ).filePath,
                 'utf8'
               )
-            : JSON.parse(
-                await this.fs.readFile(
-                  (
-                    await this.getFsPath({
-                      pathname: `${key}.json`,
-                      appDir: false,
-                    })
-                  ).filePath,
-                  'utf8'
-                )
-              )
+            )
+          }
 
           let meta: RouteMetadata | undefined
 

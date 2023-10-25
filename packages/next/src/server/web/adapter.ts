@@ -12,9 +12,9 @@ import { NextURL } from './next-url'
 import { stripInternalSearchParams } from '../internal-utils'
 import { normalizeRscURL } from '../../shared/lib/router/utils/app-paths'
 import {
-  NEXT_ROUTER_PREFETCH,
+  NEXT_ROUTER_PREFETCH_HEADER,
   NEXT_ROUTER_STATE_TREE,
-  RSC,
+  RSC_HEADER,
 } from '../../client/components/app-router-headers'
 import { NEXT_QUERY_PARAM_PREFIX } from '../../lib/constants'
 import { ensureInstrumentationRegistered } from './globals'
@@ -48,9 +48,9 @@ class NextRequestHint extends NextRequest {
 }
 
 const FLIGHT_PARAMETERS = [
-  [RSC],
+  [RSC_HEADER],
   [NEXT_ROUTER_STATE_TREE],
-  [NEXT_ROUTER_PREFETCH],
+  [NEXT_ROUTER_PREFETCH_HEADER],
 ] as const
 
 export type AdapterOptions = {

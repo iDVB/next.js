@@ -32,9 +32,9 @@ import {
 import { canSegmentBeOverridden } from '../../client/components/match-segments'
 import { stripInternalQueries } from '../internal-utils'
 import {
-  NEXT_ROUTER_PREFETCH,
+  NEXT_ROUTER_PREFETCH_HEADER,
   NEXT_ROUTER_STATE_TREE,
-  RSC,
+  RSC_HEADER,
 } from '../../client/components/app-router-headers'
 import { createMetadataComponents } from '../../lib/metadata/metadata'
 import { RequestAsyncStorageWrapper } from '../async-storage/request-async-storage-wrapper'
@@ -392,7 +392,7 @@ async function renderToHTMLOrFlightImpl(
   renderOpts: RenderOpts,
   baseCtx: AppRenderBaseContext
 ) {
-  const isFlight = req.headers[RSC.toLowerCase()] !== undefined
+  const isFlight = req.headers[RSC_HEADER.toLowerCase()] !== undefined
   const isNotFoundPath = pagePath === '/404'
 
   // A unique request timestamp used by development to ensure that it's
@@ -531,7 +531,7 @@ async function renderToHTMLOrFlightImpl(
   stripInternalQueries(query)
 
   const isPrefetch =
-    req.headers[NEXT_ROUTER_PREFETCH.toLowerCase()] !== undefined
+    req.headers[NEXT_ROUTER_PREFETCH_HEADER.toLowerCase()] !== undefined
 
   /**
    * Router state provided from the client-side router. Used to handle rendering from the common layout down.
@@ -694,7 +694,7 @@ async function renderToHTMLOrFlightImpl(
       )
 
       const renderer = createStaticRenderer({
-        ppr: renderOpts.ppr,
+        ppr: renderOpts.experimental.ppr,
         isStaticGeneration: staticGenerationStore.isStaticGeneration,
         postponed: renderOpts.postponed
           ? JSON.parse(renderOpts.postponed)

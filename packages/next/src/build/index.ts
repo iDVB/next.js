@@ -29,6 +29,8 @@ import {
   PAGES_DIR_ALIAS,
   INSTRUMENTATION_HOOK_FILENAME,
   NEXT_DID_POSTPONE_HEADER,
+  RSC_PREFETCH_SUFFIX,
+  RSC_SUFFIX,
 } from '../lib/constants'
 import { FileType, fileExists } from '../lib/file-exists'
 import { findPagesDir } from '../lib/find-pages-dir'
@@ -135,8 +137,8 @@ import { eventSwcPlugins } from '../telemetry/events/swc-plugins'
 import { normalizeAppPath } from '../shared/lib/router/utils/app-paths'
 import {
   ACTION,
-  NEXT_ROUTER_PREFETCH,
-  RSC,
+  NEXT_ROUTER_PREFETCH_HEADER,
+  RSC_HEADER,
   RSC_CONTENT_TYPE_HEADER,
   RSC_VARY_HEADER,
 } from '../client/components/app-router-headers'
@@ -248,10 +250,12 @@ export type RoutesManifest = {
     localeDetection?: false
   }
   rsc: {
-    header: typeof RSC
+    header: typeof RSC_HEADER
     didPostponeHeader: typeof NEXT_DID_POSTPONE_HEADER
     varyHeader: typeof RSC_VARY_HEADER
-    prefetchHeader: typeof NEXT_ROUTER_PREFETCH
+    prefetchHeader: typeof NEXT_ROUTER_PREFETCH_HEADER
+    suffix: typeof RSC_SUFFIX
+    prefetchSuffix: typeof RSC_PREFETCH_SUFFIX
   }
   skipMiddlewareUrlNormalize?: boolean
   caseSensitive?: boolean
@@ -828,14 +832,16 @@ export default async function build(
             dataRoutes: [],
             i18n: config.i18n || undefined,
             rsc: {
-              header: RSC,
+              header: RSC_HEADER,
               varyHeader: RSC_VARY_HEADER,
-              prefetchHeader: NEXT_ROUTER_PREFETCH,
+              prefetchHeader: NEXT_ROUTER_PREFETCH_HEADER,
               didPostponeHeader: NEXT_DID_POSTPONE_HEADER,
               contentTypeHeader: RSC_CONTENT_TYPE_HEADER,
+              suffix: RSC_SUFFIX,
+              prefetchSuffix: RSC_PREFETCH_SUFFIX,
             },
             skipMiddlewareUrlNormalize: config.skipMiddlewareUrlNormalize,
-          }
+          } as RoutesManifest
         })
 
       if (rewrites.beforeFiles.length === 0 && rewrites.fallback.length === 0) {
@@ -1329,9 +1335,9 @@ export default async function build(
         requestHeaders: {},
         CurCacheHandler: CacheHandler,
         minimalMode: ciEnvironment.hasNextSupport,
-
         allowedRevalidateHeaderKeys:
           config.experimental.allowedRevalidateHeaderKeys,
+        experimental: { ppr: config.experimental.ppr === true },
       })
 
       const pagesStaticWorkers = createStaticWorker(
@@ -2249,6 +2255,8 @@ export default async function build(
             // partial pre-rendering.
             const experimentalPPR =
               !isRouteHandler && config.experimental.ppr === true
+                ? true
+                : undefined
 
             // this flag is used to selectively bypass the static cache and invoke the lambda directly
             // to enable server actions on static routes
@@ -2280,9 +2288,13 @@ export default async function build(
 
               if (revalidate !== 0) {
                 const normalizedRoute = normalizePagePath(route)
-                const dataRoute = isRouteHandler
-                  ? null
-                  : path.posix.join(`${normalizedRoute}.rsc`)
+
+                let dataRoute: string | null
+                if (isRouteHandler) {
+                  dataRoute = null
+                } else {
+                  dataRoute = path.posix.join(`${normalizedRoute}${RSC_SUFFIX}`)
+                }
 
                 const routeMeta: Partial<SsgRoute> = {}
 

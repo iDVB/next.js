@@ -135,7 +135,7 @@ export interface RenderOptsPartial {
   serverActionsBodySizeLimit?: SizeLimit
   params?: ParsedUrlQuery
   isPrefetch?: boolean
-  ppr: boolean
+  experimental: { ppr: boolean }
   postponed?: string
 }
 

@@ -82,12 +82,12 @@ import { getHostname } from '../shared/lib/get-hostname'
 import { parseUrl as parseUrlUtil } from '../shared/lib/router/utils/parse-url'
 import { getNextPathnameInfo } from '../shared/lib/router/utils/get-next-pathname-info'
 import {
-  RSC,
+  RSC_HEADER,
   RSC_VARY_HEADER,
   FLIGHT_PARAMETERS,
   NEXT_RSC_UNION_QUERY,
   ACTION,
-  NEXT_ROUTER_PREFETCH,
+  NEXT_ROUTER_PREFETCH_HEADER,
   RSC_CONTENT_TYPE_HEADER,
 } from '../client/components/app-router-headers'
 import type {
@@ -253,7 +253,7 @@ type BaseRenderOpts = {
   appDirDevErrorLogger?: (err: any) => Promise<void>
   strictNextHead: boolean
   isExperimentalCompile?: boolean
-  ppr: boolean
+  experimental: { ppr: boolean }
 }
 
 export interface BaseRequestHandler {
@@ -514,7 +514,9 @@ export default abstract class Server<ServerOptions extends Options = Options> {
 
       // @ts-expect-error internal field not publicly exposed
       isExperimentalCompile: this.nextConfig.experimental.isExperimentalCompile,
-      ppr: this.nextConfig.experimental.ppr === true,
+      experimental: {
+        ppr: this.nextConfig.experimental.ppr === true,
+      },
     }
 
     // Initialize next/config with the environment configuration
@@ -571,8 +573,8 @@ export default abstract class Server<ServerOptions extends Options = Options> {
   ) => {
     if (
       !parsedUrl.pathname ||
-      req.method !== 'POST' ||
-      !this.normalizers.postponed.match(parsedUrl.pathname)
+      !this.normalizers.postponed.match(parsedUrl.pathname) ||
+      req.method !== 'POST'
     ) {
       return
     }
@@ -1765,7 +1767,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
      * prefetch request.
      */
     const isAppPrefetch =
-      req.headers[NEXT_ROUTER_PREFETCH.toLowerCase()] === '1'
+      req.headers[NEXT_ROUTER_PREFETCH_HEADER.toLowerCase()] === '1'
 
     // when we are handling a middleware prefetch and it doesn't
     // resolve to a static data route we bail early to avoid
@@ -1808,7 +1810,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
     }
 
     // Don't delete headers[RSC] yet, it still needs to be used in renderToHTML later
-    const isFlightRequest = Boolean(req.headers[RSC.toLowerCase()])
+    const isFlightRequest = Boolean(req.headers[RSC_HEADER.toLowerCase()])
 
     // If we're in minimal mode, then try to get the postponed information from
     // the request metadata. If available, use it for resuming the postponed
@@ -1926,7 +1928,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
         !this.renderOpts.dev &&
         !isPreviewMode &&
         isSSG &&
-        req.headers[RSC.toLowerCase()]
+        req.headers[RSC_HEADER.toLowerCase()]
       ) {
         if (!this.minimalMode) {
           isDataReq = true
@@ -2140,7 +2142,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
           prerenderManifest,
           renderOpts: {
             // App Route's cannot postpone, so don't enable it.
-            ppr: false,
+            experimental: { ppr: false },
             originalPathname: components.ComponentMod.originalPathname,
             supportsDynamicHTML,
             incrementalCache,
@@ -2244,7 +2246,12 @@ export default abstract class Server<ServerOptions extends Options = Options> {
             }
           } catch {
             // We fallback to invoking the function if prefetch data is not
-            // available.
+            // available, unless we're in PRR, then we throw an error.
+            if (this.renderOpts.experimental.ppr) {
+              throw new Error(
+                'Invariant: expected prefetch to be available when PPR is enabled'
+              )
+            }
           }
         }
 
@@ -2550,11 +2557,11 @@ export default abstract class Server<ServerOptions extends Options = Options> {
     // Coerce the revalidate parameter from the render.
     let revalidate: Revalidate | undefined
 
-    // If this is a resume request, or the request has postponed, ensure that
-    // we don't cache this response.
+    // If this is a resume request, or this request has postponed while not in
+    // minimal mode, do not cache.
     if (
       resumed?.postponed ||
-      (cachedData?.kind === 'PAGE' && cachedData.postponed)
+      (cachedData?.kind === 'PAGE' && cachedData.postponed && !this.minimalMode)
     ) {
       revalidate = 0
     } else if (

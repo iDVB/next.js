@@ -219,7 +219,9 @@ async function exportPageImpl(
             incrementalCacheHandlerPath,
             isrMemoryCacheSize,
             fetchCacheKeyPrefix,
-            distDir
+            distDir,
+            // PPR is not available for Pages.
+            { ppr: false }
           )
         : undefined
 
