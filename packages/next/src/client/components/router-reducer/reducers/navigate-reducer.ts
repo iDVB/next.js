@@ -340,8 +340,11 @@ export function navigateReducer(
       )
 
       if (
-        !applied &&
-        prefetchEntryCacheStatus === PrefetchCacheEntryStatus.stale
+        (!applied &&
+          prefetchEntryCacheStatus === PrefetchCacheEntryStatus.stale) ||
+        // TODO-APP: If the prefetch was postponed, we don't want to apply it
+        // until we land router changes to handle the postponed case.
+        postponed
       ) {
         applied = addRefetchToLeafSegments(
           cache,
