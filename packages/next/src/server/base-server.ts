@@ -127,6 +127,7 @@ import getRouteFromAssetPath from '../shared/lib/router/utils/get-route-from-ass
 import { stripInternalHeaders } from './internal-utils'
 import { RSCPathnameNormalizer } from './future/normalizers/request/rsc'
 import { PostponedPathnameNormalizer } from './future/normalizers/request/postponed'
+import { PrefetchRSCPathnameNormalizer } from './future/normalizers/request/prefetch-rsc'
 
 export type FindComponentsResult = {
   components: LoadComponentsReturnType
@@ -394,6 +395,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
   protected readonly normalizers: {
     readonly postponed: PostponedPathnameNormalizer
     readonly rsc: RSCPathnameNormalizer
+    readonly prefetchRSC: PrefetchRSCPathnameNormalizer
   }
 
   public constructor(options: ServerOptions) {
@@ -464,6 +466,7 @@ export default abstract class Server<ServerOptions extends Options = Options> {
         this.hasAppDir && this.nextConfig.experimental.ppr
       ),
       rsc: new RSCPathnameNormalizer(this.hasAppDir),
+      prefetchRSC: new PrefetchRSCPathnameNormalizer(this.hasAppDir),
     }
 
     const serverComponents = this.hasAppDir
@@ -546,18 +549,28 @@ export default abstract class Server<ServerOptions extends Options = Options> {
   }
 
   private handleRSCRequest: RouteHandler = (req, _res, parsedUrl) => {
-    if (
-      !parsedUrl.pathname ||
-      !this.normalizers.rsc.match(parsedUrl.pathname)
-    ) {
-      return
+    if (!parsedUrl.pathname) return
+
+    let matched = false
+    if (this.normalizers.prefetchRSC.match(parsedUrl.pathname)) {
+      matched = true
+      parsedUrl.pathname = this.normalizers.prefetchRSC.normalize(
+        parsedUrl.pathname,
+        true
+      )
+    } else if (this.normalizers.rsc.match(parsedUrl.pathname)) {
+      matched = true
+      parsedUrl.pathname = this.normalizers.rsc.normalize(
+        parsedUrl.pathname,
+        true
+      )
     }
 
+    // If we didn't match, return.
+    if (!matched) return
+
+    // Mark this as a data request.
     parsedUrl.query.__nextDataReq = '1'
-    parsedUrl.pathname = this.normalizers.rsc.normalize(
-      parsedUrl.pathname,
-      true
-    )
 
     if (req.url) {
       const parsed = parseUrl(req.url)
@@ -2232,7 +2245,11 @@ export default abstract class Server<ServerOptions extends Options = Options> {
       } else if (
         components.routeModule?.definition.kind === RouteKind.APP_PAGE
       ) {
-        if (isAppPrefetch && process.env.NODE_ENV === 'production') {
+        if (
+          isAppPrefetch &&
+          process.env.NODE_ENV === 'production' &&
+          !this.minimalMode
+        ) {
           try {
             const prefetchRsc = await this.getPrefetchRsc(resolvedUrlPathname)
             if (prefetchRsc) {
