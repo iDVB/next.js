@@ -251,37 +251,6 @@ export function navigateReducer(
   // Unwrap cache data with `use` to suspend here (in the reducer) until the fetch resolves.
   const [flightData, canonicalUrlOverride, postponed] = readRecordValue(data!)
 
-  // If it was postponed we skip the prefetch and trigger a new fetch for the page.
-  if (postponed) {
-    // eslint-disable-next-line @typescript-eslint/no-shadow
-    const data = createRecordFromThenable(
-      fetchServerResponse(
-        url,
-        state.tree,
-        state.nextUrl,
-        state.buildId,
-        // in dev, there's never gonna be a prefetch entry so we want to prefetch here
-        // in order to simulate the behavior of the prefetch cache
-        process.env.NODE_ENV === 'development' ? PrefetchKind.AUTO : undefined
-      )
-    )
-
-    const newPrefetchValue = {
-      data: createRecordFromThenable(Promise.resolve(data)),
-      // this will make sure that the entry will be discarded after 30s
-      kind:
-        process.env.NODE_ENV === 'development'
-          ? PrefetchKind.AUTO
-          : PrefetchKind.TEMPORARY,
-      prefetchTime: Date.now(),
-      treeAtTimeOfPrefetch: state.tree,
-      lastUsedTime: null,
-    }
-
-    state.prefetchCache.set(createHrefFromUrl(url, false), newPrefetchValue)
-    prefetchValues = newPrefetchValue
-  }
-
   // we only want to mark this once
   if (!prefetchValues.lastUsedTime) {
     // important: we should only mark the cache node as dirty after we unsuspend from the call above
@@ -342,8 +311,6 @@ export function navigateReducer(
       if (
         (!applied &&
           prefetchEntryCacheStatus === PrefetchCacheEntryStatus.stale) ||
-        // TODO-APP: If the prefetch was postponed, we don't want to apply it
-        // until we land router changes to handle the postponed case.
         postponed
       ) {
         applied = addRefetchToLeafSegments(
